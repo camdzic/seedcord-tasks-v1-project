@@ -1,0 +1,12 @@
+import { EventHandler, RegisterEvent } from '@seedcord/gateway';
+import { Events } from 'discord.js';
+
+@RegisterEvent([Events.ClientReady, { frequency: 'once' }])
+export class Ready extends EventHandler<Events.ClientReady> {
+    public async execute(): Promise<void> {
+        const [client] = this.event;
+        const application = await client.application.fetch();
+
+        this.logger.info(`${application.name} is in ${client.guilds.cache.size} servers`);
+    }
+}

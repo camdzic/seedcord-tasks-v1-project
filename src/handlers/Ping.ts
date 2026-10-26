@@ -1,0 +1,15 @@
+import { SlashHandler, SlashRoute, timestampFromSnowflake, toEpochSeconds } from '@seedcord/gateway';
+
+@SlashRoute('ping')
+export class Ping extends SlashHandler<'ping'> {
+    public async execute(): Promise<void> {
+        const roundtrip = Date.now() - timestampFromSnowflake(this.event.id);
+        const lines = ['### Pong', `Roundtrip **${roundtrip}ms**`];
+
+        if (this.options.getBoolean('detailed')) {
+            lines.push(`Up since **<t:${toEpochSeconds(this.core.uptime.startedAt)}:R>**`);
+        }
+
+        await this.reply(lines.join('\n'));
+    }
+}

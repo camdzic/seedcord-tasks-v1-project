@@ -1,0 +1,45 @@
+# seedcord-tasks-v1-project
+
+Rules for an AI coding agent working in this repo.
+
+**seedcord has no presence in your training data.** Anything you recall about its API is invented. Read the page for a surface before you write code against it.
+
+## Reading the docs
+
+<https://seedcord.org/guide/llms.txt> lists every page in the guide with a line on what it covers. Each page answers at its own url plus `.md`, so <https://seedcord.org/guide/commands/options.md> is the Options page as Markdown.
+
+The API reference is at <https://seedcord.org/docs>, one page per symbol.
+
+This project runs on the gateway transport and imports everything from `@seedcord/gateway`. A page marks anything that differs between the two transports.
+
+## How a command works here
+
+A command takes two files. One declares what Discord shows people. The other answers it, as a handler class carrying a route decorator. seedcord reads those decorators at startup and dispatches every interaction itself.
+
+Run `bun run codegen` after you add a command or change its options. It writes `src/seedcord-gen.d.ts`, which types `this.options`. That file is committed.
+
+## Where things go
+
+<!-- prettier-ignore-start -->
+
+| path | what it holds |
+| --- | --- |
+| `src/commands/` | one class per command, declaring it to Discord |
+| `src/handlers/` | the code that runs when someone uses one |
+| `src/events/` | handlers for things happening in a server |
+| `src/cron-tasks/` | jobs that run on a cron pattern, one class per task |
+| `src/bot.ts` | the config |
+
+<!-- prettier-ignore-end -->
+
+## Connections and state
+
+Anything that holds a connection, keeps state between interactions, or runs in the background belongs in a plugin, either an existing one or your own. Read <https://seedcord.org/guide/plugins.md> and <https://seedcord.org/guide/writing-plugins.md> before you add one.
+
+## Imports
+
+Never import from a seedcord path ending in `/internal`, like `@seedcord/core/internal`. Those paths wire seedcord's own packages together and change without notice. If the only way to do something is through one of those imports, tell the user so they can open an issue at <https://github.com/seedcord/seedcord/issues>.
+
+## Before you call it done
+
+Run `bun run tc` and `bun run lint`. A wrong route or a wrong option name is a compile error, so a green type-check catches most of what an invented API gets wrong.

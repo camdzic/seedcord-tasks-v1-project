@@ -1,0 +1,44 @@
+{
+    "name": "seedcord-tasks-v1-project",
+    "type": "module",
+    "version": "0.1.0",
+    "private": true,
+    "engines": {
+        "bun": ">=1.4.2"
+    },
+    "scripts": {
+        "dev": "seedcord dev",
+        "build": "seedcord build",
+        "start": "node --enable-source-maps dist/index.mjs",
+        "codegen": "seedcord codegen",
+        "commands": "seedcord commands",
+        "commands:deploy": "seedcord commands deploy",
+        "tc": "tsc --noEmit",
+        "lint": "eslint \"src/**/*.ts\" --cache",
+        "lint:fix": "eslint \"src/**/*.ts\" --fix --cache",
+        "fmt": "prettier --write \"src/**/*.{ts,json,md}\" --cache",
+        "fmt:check": "prettier --check \"src/**/*.{ts,json,md}\" --cache",
+        "check": "bun run tc && bun run lint && bun run fmt:check"
+    },
+    "devDependencies": {
+        "@seedcord/eslint-config": "^3.0.0",
+        "@seedcord/tsconfig": "^3.0.0",
+        "@types/node": "^26.6.5",
+        "eslint": "^10.13.0",
+        "jiti": "^2.7.0",
+        "prettier": "^3.9.10",
+        "seedcord": "^0.22.0",
+        "typescript": "~6.0",
+        "vite": "8.3.4"
+    },
+    "dependencies": {
+        "@discordjs/builders": "^1.14.1",
+        "@seedcord/core": "^0.11.0",
+        "@seedcord/gateway": "^0.8.0",
+        "@seedcord/logger": "^0.5.0",
+        "@seedcord/utils": "^0.9.0",
+        "croner": "^10.0.1",
+        "discord.js": "^14.27.0",
+        "envapt": "^9.2.0"
+    }
+}
