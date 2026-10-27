@@ -1,48 +1,93 @@
 # tasks plugin (draft)
 
-A draft of a seedcord plugin for jobs that run on their own, without a command. It's laid out as the package the maintainers suggested, one package with a subpath per kind of task:
+A draft of a seedcord plugin for code that runs on its own, without a command. One `Task` class covers both kinds:
 
-| subpath      | what it runs                                                             | state       |
-| ------------ | ------------------------------------------------------------------------ | ----------- |
-| `/cron`      | classes on a repeating cron pattern, in memory, through croner           | this code   |
-| `/scheduled` | one-off or delayed jobs with a payload, stored so they survive a restart | not started |
+| kind      | how it runs                                         | state                            |
+| --------- | --------------------------------------------------- | -------------------------------- |
+| cron      | by itself, on a pattern in `@RegisterTask(pattern)` | done, through croner             |
+| scheduled | once, when code calls `tasks.schedule(Task, ...)`   | in memory until official `Store` |
 
-In this bot `#plugins/tasks/cron` stands in for `@seedcord/plugin-tasks/cron`.
+In this bot `#plugins/tasks` stands in for `@seedcord/plugin-tasks`.
 
-## Using `/cron`
-
-Attach the plugin with the folder your tasks live in:
+## Setup
 
 ```ts title="src/bot.ts"
-import { CronTasks } from '#plugins/tasks/cron';
+import { Tasks } from '#plugins/tasks';
 
-export default seedcord.attach('cron', CronTasks, { dir: './cron-tasks', timezone: 'UTC' });
+export default seedcord.attach('tasks', Tasks, { path: './tasks', timezone: 'UTC' });
 ```
 
-Write one class per task. The decorator gives it its schedule, and `run()` is the job:
+Both kinds live in `path`, one class per task. The plugin loads them with `importFiles`, so they're part of the build.
 
-```ts title="src/cron-tasks/Heartbeat.ts"
-import { CronTask, RegisterCronTask } from '#plugins/tasks/cron/gateway';
+## A cron task
 
-@RegisterCronTask('* * * * *')
-export class Heartbeat extends CronTask {
-    public async run(): Promise<void> {
+```ts title="src/tasks/Heartbeat.ts"
+import { RegisterTask, Task } from '#plugins/tasks/gateway';
+
+@RegisterTask('* * * * *')
+export class Heartbeat extends Task {
+    public async execute(): Promise<void> {
         this.logger.info(`${this.core.bot.client.guilds.cache.size} servers`);
     }
 }
 ```
 
-Import tasks from the subpath for your transport, `/cron/gateway` here, so `this.core` is your bot's full `Core` with the client and your plugins on it. This is how seedcord does it too. The generic `CronTask<TCore>` lives in `/cron`, and each transport's subpath re-exports it with that transport's `Core` filled in, just as `@seedcord/gateway` does with `Subscriber`. An http bot would get `/cron/http` the same way, with `@seedcord/http` as an optional peer dependency.
+With a pattern, `@RegisterTask(pattern, options?)` also takes `key`, `timezone`, `protect` (on by default), `paused`, `maxRuns`, `startAt` and `stopAt`. A cron task can't declare data, since nothing passes it any. Writing `@RegisterTask('...')` on a `Task<{ ... }>` fails to compile.
 
-`@RegisterCronTask(pattern, options?)` takes `name` (defaults to the class name), `timezone`, `protect` (on by default), `paused`, `maxRuns`, `startAt` and `stopAt`.
+## A scheduled task
 
-`run()` gets `{ signal, startedAt, trigger }`. `signal` aborts when the bot shuts down. A task can also write `onError(error, context)` and `onOverrun()`.
+```ts title="src/tasks/Unban.ts"
+@RegisterTask()
+export class Unban extends Task<{ guildId: string; userId: string }> {
+    public async execute(): Promise<void> {
+        const { guildId, userId } = this.data;
+        // ...
+    }
+}
+```
 
-From anywhere with `core`, `this.core.cron` has `list()`, `has()`, `nextRun()`, `pause()`, `resume()` and `trigger()`.
+```ts title="anywhere with core"
+const job = this.core.tasks.schedule(Unban, { in: '1d', data: { guildId, userId } });
+this.core.tasks.cancel(job.id);
+```
 
-### Checked at compile time
+`in` takes a duration that seedcord's `parseDuration` reads, like `'30s'`, `'2h'` or `'1d'`. `at` takes a `Date`. `data` is typed from the class, so a missing or wrong field fails to compile, and so does `data` on a task that takes none.
 
-The decorator checks a literal pattern and timezone without codegen. A mistake fails to compile, and the error says what's wrong:
+## Inside a task
+
+`execute()` takes no arguments. Like a `Subscriber`, everything is on `this`:
+
+| member      | holds                                                    |
+| ----------- | -------------------------------------------------------- |
+| `data`      | the scheduled payload, typed from `Task<TData>`          |
+| `core`      | the bot's `Core`, with the client and your plugins       |
+| `logger`    | logs under the task's key, on the plugin's channel       |
+| `signal`    | aborts when the bot shuts down. Pass it to anything slow |
+| `startedAt` | when this run started                                    |
+| `trigger`   | `'cron'`, `'scheduled'` or `'manual'`                    |
+
+Each run gets a fresh instance, as subscribers do, so a field doesn't keep its value between runs. A task can also write `onError(error)` and `onOverrun()`.
+
+Import `Task` from the subpath for your transport, `/gateway` here, to type `this.core` as your bot's `Core`. That's how `@seedcord/gateway` types `Subscriber`. The generic `Task<TData, TCore>` is in the root, and an http bot would get `/http` the same way.
+
+## Controlling tasks
+
+Everything takes the class, not a name:
+
+```ts
+this.core.tasks.pause(Heartbeat);
+this.core.tasks.resume(Heartbeat);
+this.core.tasks.nextRun(Heartbeat);
+await this.core.tasks.trigger(Heartbeat); // runs now, outside the schedule
+this.core.tasks.list(); // cron tasks and their state
+this.core.tasks.jobs(); // pending scheduled jobs
+```
+
+`trigger()` only takes tasks without data. `pause`, `resume` and `nextRun` throw for a task without a pattern.
+
+## Checked at compile time
+
+The decorator checks a literal pattern and timezone without codegen:
 
 ```txt output
 Argument of type '"61 * * * *"' is not assignable to parameter of type
@@ -52,25 +97,26 @@ Type '"Europe/Sarajvo"' is not assignable to type
 '"'Europe/Sarajvo' is not an IANA timezone. Write one like 'Europe/Sarajevo' or 'UTC'"'.
 ```
 
-The pattern check follows croner's default grammar: 5, 6 or 7 fields, `*`, `?`, lists, ranges, `*/S` and `N-M/S` steps, month and weekday names, `L`, `LW` and `NW` in day of month, `NL`, `N#K` and a leading `+` in day of week, and croner's nicknames. It checks each value against its field's range, each step against the field's size, and that each range runs low to high. It asks for single spaces where croner allows several. croner still parses every pattern when the bot starts, so anything the types let through still gets caught then.
+The pattern check follows croner's default grammar: 5, 6 or 7 fields, `*`, `?`, lists, ranges, `*/S` and `N-M/S` steps, month and weekday names, `L`, `LW` and `NW` in day of month, `NL`, `N#K` and a leading `+` in day of week, and croner's nicknames. It checks each value against its field's range, each step against the field's size, and that each range runs low to high. It asks for single spaces where croner allows several. croner still parses every pattern at startup, so anything the types let through still gets caught then.
 
 `timezones.ts` lists 467 names, every IANA zone that both Node and Bun accept. It includes old names like `Europe/Kiev` and new ones like `Europe/Kyiv`. A non-literal `string`, such as one read from `.env`, skips both checks and gets validated at startup.
 
 ## How it behaves
 
-- **Loading.** `init()` imports every file under `dir` and keeps exported classes that extend `CronTask` and carry the decorator. A bad pattern, a bad timezone or two tasks with the same name stop startup and name the file.
-- **Starting.** Every task is created paused and starts in `ready()`, once the client has logged in, so a run can't reach a client that isn't connected yet.
-- **Overlap.** With `protect` on, a run that fires while the last one is still going gets skipped, and the plugin calls `onOverrun()`. Manual `trigger()` runs follow the same rule.
-- **Errors.** A throw in `run()` gets logged and published as `cronTaskFailed` on the bus, then the plugin calls `onError()`. A successful run publishes `cronTaskFinished` with its duration. That's the hook for Sentry or a webhook, so the plugin doesn't depend on either.
-- **Shutdown.** `dispose()` runs in `Drain`, not `Disconnect`. It stops every schedule, aborts the signal and waits for in-flight runs, so a run that's writing to a database finishes before the database plugin disconnects.
-- **Hot reload.** Under `seedcord dev`, saving a task file stops its old job and schedules the new class without a restart.
-- **Where it runs.** It extends `@seedcord/core/plugin` with `runtime: 'server'`, so it works on gateway bots and on http bots running on Node or Bun. It doesn't run on Workers, which have no long-lived timers. Cloudflare's own cron triggers would be a separate design.
+- **Loading.** `init()` imports every file under `path` and keeps exported classes that extend `Task` and carry `@RegisterTask`. A bad pattern, a bad timezone or two tasks with the same key stop startup and name the file.
+- **Keys.** Each task has a key, its class name unless `key` sets one. Callers never see it. It's what a stored job will point at once `Store` lands, so set `key` on scheduled tasks to keep pending jobs working through a rename.
+- **Starting.** Cron tasks start in `ready()`, once the client has logged in.
+- **Overlap.** With `protect` on, a cron run that fires while the last one is still going gets skipped, and the plugin calls `onOverrun()`. Manual `trigger()` runs follow the same rule.
+- **Scheduled jobs.** They're held in memory for now. A date in the past runs right away. `data` goes through `structuredClone`, so data that can't be stored, like a function, throws when you schedule it.
+- **Errors.** A throw in `execute()` gets logged and published as `taskFailed` on the bus, then the plugin calls `onError()`. A successful run publishes `taskFinished`. That's the hook for Sentry or a webhook.
+- **Shutdown.** `dispose()` runs in `Drain`, not `Disconnect`. It stops every schedule, logs how many pending jobs it dropped, aborts the signal and waits for in-flight runs, so a run that's writing to a database finishes before the database plugin disconnects.
+- **Hot reload.** Under `seedcord dev`, saving a task file swaps in the new class. Pending jobs look their task up by key when they fire, so they run the new code.
+- **Where it runs.** It extends `@seedcord/core/plugin` with `runtime: 'server'`, so it works on gateway bots and on http bots running on Node or Bun, but not on Workers.
 
 ## Open questions for review
 
-1. **A subpath per transport.** `this.core` is typed through `/cron/gateway` and a future `/cron/http`, the same way seedcord types handlers. Is a subpath per transport fine for a plugin package, or should the generic `CronTask<Core>` be the only way?
-2. **Task names.** Methods like `pause()` take a plain string. Mongoose uses a hand-written registry interface to type its keys. Is that worth the extra `declare module` block here?
-3. **Log channel.** `Plugin` doesn't expose its attach key or log channel, so the plugin finds its own key by looking for itself on `core`. That way each task's logger prints on the plugin's channel under the task's name. A public getter on `Plugin` would remove the workaround.
+1. **Persistence.** Scheduled jobs wait on the reworked `Store`. Until then they're lost on restart, and the plugin says so at shutdown.
+2. **A subpath per transport.** `this.core` is typed through `/gateway` and a future `/http`, the same way seedcord types handlers. Is that fine for a plugin package?
+3. **Log channel.** `Plugin` doesn't expose its attach key or log channel, so the plugin finds its own key by looking for itself on `core`. A public getter on `Plugin` would remove the workaround.
 4. **`protect` on by default.** The Sapphire plugin defaults to off. Overlapping runs are almost always a bug in a bot, so this draft defaults to on.
-5. **Date patterns.** croner accepts a `Date` for a one-off run. This draft rejects it, because a one-off job belongs in `/scheduled`.
-6. **The timezone list.** `timezones.ts` is generated from the runtimes' ICU data, so it needs a regenerate when a zone gets added. The plugin-level `timezone` option takes only that list, so a value from `.env` needs a cast there. Should it take any string instead?
+5. **The timezone list.** `timezones.ts` is generated from the runtimes' ICU data, so it needs a regenerate when a zone gets added. The plugin-level `timezone` option takes only that list, so a value from `.env` needs a cast there.

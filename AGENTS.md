@@ -27,7 +27,7 @@ Run `bun run codegen` after you add a command or change its options. It writes `
 | `src/commands/` | one class per command, declaring it to Discord |
 | `src/handlers/` | the code that runs when someone uses one |
 | `src/events/` | handlers for things happening in a server |
-| `src/cron-tasks/` | jobs that run on a cron pattern, one class per task |
+| `src/tasks/` | tasks that run on a cron pattern or when scheduled, one class per task |
 | `src/bot.ts` | the config |
 
 <!-- prettier-ignore-end -->

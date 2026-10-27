@@ -53,7 +53,7 @@ The two webhook keys take Discord webhook URLs. Set them to get error reports po
 - `src/commands/` holds command definitions, one class per command.
 - `src/handlers/` holds the code that runs when someone uses one.
 - `src/events/` holds event handlers for the things happening in a server.
-- `src/cron-tasks/` holds jobs that run on a cron pattern, one class per task.
+- `src/tasks/` holds tasks that run on a cron pattern or when scheduled, one class per task.
 - `src/bot.ts` is the config.
 
 ## Docs

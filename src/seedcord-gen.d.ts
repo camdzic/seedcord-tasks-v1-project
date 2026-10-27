@@ -6,7 +6,7 @@ import type Bot from './bot';
 // prettier-ignore
 declare module '@seedcord/gateway' {
     interface Core {
-        cron: (typeof Bot)['cron'];
+        tasks: (typeof Bot)['tasks'];
         uptime: (typeof Bot)['uptime'];
     }
     interface SlashRegistry {

@@ -2,7 +2,7 @@ import { Seedcord } from '@seedcord/gateway';
 import { GatewayIntentBits } from 'discord.js';
 import { Converters, Envapter } from 'envapt';
 
-import { CronTasks } from '#plugins/tasks/cron';
+import { Tasks } from '#plugins/tasks';
 import { Uptime } from '#plugins/Uptime';
 
 export const seedcord = new Seedcord({
@@ -30,6 +30,6 @@ export const seedcord = new Seedcord({
     }
 })
     .attach('uptime', Uptime)
-    .attach('cron', CronTasks, { dir: './cron-tasks', timezone: 'UTC' });
+    .attach('tasks', Tasks, { path: './tasks', timezone: 'UTC' });
 
 export default seedcord;
