@@ -4,15 +4,15 @@ import { ShutdownPhase } from '@seedcord/core';
 import { HmrModuleHandler } from '@seedcord/core/hmr';
 import { Plugin } from '@seedcord/core/plugin';
 import { Logger } from '@seedcord/logger';
-import { importFiles, parseDuration } from '@seedcord/utils';
+import { importFiles } from '@seedcord/utils';
 import { Cron } from 'croner';
 
-import { findAttachKey, isTimezone, toError } from './helpers';
+import { findAttachKey, isTimezone, parseAt, parseIn, toError } from './helpers';
 import { taskKey, taskMetadata } from './RegisterTask';
 import { Task } from './Task';
 
 import type { TaskClass, TaskMetadata } from './RegisterTask';
-import type { CronStatus, ScheduledJob, ScheduleOptions, TaskContext, TasksOptions, TaskTrigger } from './types';
+import type { CronStatus, ScheduledJob, ScheduleOptions, TaskContext, TasksOptions, TaskTrigger, When } from './types';
 import type { CoreBase, Subscriptions } from '@seedcord/core';
 import type { HmrUpdateEvent } from '@seedcord/core/plugin';
 
@@ -125,9 +125,13 @@ export class Tasks extends Plugin<{ runtime: 'server' }> {
         await this.reloader.handle(event);
     }
 
-    public schedule<TTask extends AnyTaskClass>(Task: TTask, options: ScheduleOptions<DataOf<TTask>>): ScheduledJob {
+    public schedule<TTask extends AnyTaskClass, const TIn extends string = string>(
+        Task: TTask,
+        options: ScheduleOptions<DataOf<TTask>, TIn>
+    ): ScheduledJob {
         const key = this.registered(Task).key;
-        const at = options.in === undefined ? options.at : new Date(Date.now() + this.parseIn(options.in));
+        const when: When = options;
+        const at = when.in === undefined ? parseAt(when.at) : new Date(Date.now() + parseIn(when.in));
 
         if (Number.isNaN(at.getTime())) throw new Error(`Scheduled ${key} with an invalid date.`);
 
@@ -205,13 +209,6 @@ export class Tasks extends Plugin<{ runtime: 'server' }> {
         if (!entry) throw new Error(`${key} has no cron pattern. Pass one to @RegisterTask to pause or resume it.`);
 
         return entry;
-    }
-
-    private parseIn(duration: string): number {
-        const ms = parseDuration(duration);
-        if (ms === null) throw new Error(`'${duration}' isn't a duration. Write one like '30s', '2h' or '1d'.`);
-
-        return ms;
     }
 
     private register(Task: TaskClass, file: string): void {

@@ -2,13 +2,13 @@
 
 type Digit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
 
-type IsDigits<Text extends string> = Text extends `${Digit}${infer Rest}`
+export type IsDigits<Text extends string> = Text extends `${Digit}${infer Rest}`
     ? Rest extends ''
         ? true
         : IsDigits<Rest>
     : false;
 
-type StripZeros<Text extends string> = Text extends `0${infer Rest extends `${Digit}${string}`}`
+export type StripZeros<Text extends string> = Text extends `0${infer Rest extends `${Digit}${string}`}`
     ? StripZeros<Rest>
     : Text;
 

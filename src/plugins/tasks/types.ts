@@ -1,7 +1,7 @@
+import type { Duration } from './duration';
 import type { IanaTimezone, Timezone } from './timezones';
 import type { CoreBase } from '@seedcord/core';
 import type { Logger } from '@seedcord/logger';
-import type { ValidDuration } from '@seedcord/utils';
 
 export interface TasksOptions {
     path: string;
@@ -32,11 +32,12 @@ export interface TaskContext<TData = unknown> {
     trigger: TaskTrigger;
 }
 
-export type When = { in: ValidDuration; at?: never } | { at: Date; in?: never };
+export type When<TIn extends string = string> = { in: Duration<TIn>; at?: never } | { at: Date | number; in?: never };
 
 type HasData<TData> = [TData] extends [Exclude<TData, void>] ? true : false;
 
-export type ScheduleOptions<TData> = When & (HasData<TData> extends true ? { data: TData } : { data?: never });
+export type ScheduleOptions<TData, TIn extends string = string> = When<TIn> &
+    (HasData<TData> extends true ? { data: TData } : { data?: never });
 
 export interface CronStatus {
     key: string;
